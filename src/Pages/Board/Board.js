@@ -1,243 +1,373 @@
-import React, { useState,useEffect } from 'react';
-import styles from './Board.module.css';
-import {addColumn,getBoard,getColumns,deleteBoard,deleteColumn,deepCopy,updateColumn} from '../../Funct_Reuse/Functions'; 
-import Loader from '../Modals/Loader/Loader';
-import * as shortid from 'shortid';
-import CreateColumnModal from '../Modals/CreateColumnModal/CreateColumnModal'
-import CreateCard from '../Modals/CreateCard/CreateCard';
-import IndividualCard from '../Modals/IndividualCard/IndividualCard';
+import React, { Component } from 'react';
+import { withRouter } from 'react-router-dom';
+import styles from './Board.css';
+import createBoardStyles from './../CreateBoard/CreateBoard.css';
 
+import BoardColumn from './../../components/BoardColumn/BoardColumn';
+import Modal from './../../common/Modal/Modal';
+import CardInfo from './../../components/CardInfo/CardInfo';
+import AddCard from './../../components/AddCard/AddCard';
+import { toSnakeCase } from './../../utility';
+import Axios from 'axios';
 
-export default function Board (props){
-    
-    const [loading, setLoading] = useState(true);
-    const [boardDetails,setBoardDetails]=useState([]);
-    const [columns, setColumns] = useState([]);
-    const [columnModal,setColumnModal]=useState(false);
-    const [cardModal,setCardModal]=useState(false);
-    const [selectedColumn, setSelectedColumn] = useState(null);
-    const [editCard,setEditCard]=useState(null);
-    const [isCardAdd,setCardAdd]=useState(true);
-   
-    useEffect(() => {
-        (async function () {
-          
-          const boardId = await getBoard(props.match.params.boardid);
-          setBoardDetails(boardId);
-          await getAllColumns(boardId.id, setColumns);
-          setLoading(false);
-        })();
-      }, [props.match.params.boardid]);
-
-    //Function to close Modals
-    const closeColumnModal=()=>{
-        setColumnModal(false);
-        
+class Board extends Component {
+    constructor(props) {
+        super(props);
+        this.addColumnRef = React.createRef()
     }
-    const closeCardModal=()=>{
-        setCardModal(false);
+
+    state = {
+        showModal: false,
+        selectedCardData: {},
+        showAddCardModal: false,
+        addCardToColumnID: null,
+        boardData: {},
+        showAddColumnModal: false,
+        showEditModal: false,
+        archivedCards: []
     }
-    //Function to Add column in Firestore
-    const handleAddCloumn=(columnName) =>{
-        const newColumn = {
-          boardId: boardDetails.id,
-          name: columnName,
-          cards: [],
-          created: Date.now(),
-        };
-        addColumn(newColumn)
-        .then((output)=>{
-          newColumn['id'] = output;
-          setColumns([...columns, newColumn]);
-          setColumnModal(false);
+
+    componentDidMount() {
+        let url = 'https://pro-organizer-f83b5.firebaseio.com/boardData/-LuM4blPg67eyvzgAzwn/boards/'+this.props.match.params.boardId+'.json';
+        Axios.get(url)
+            .then(response => {
+                this.setState({
+                    boardData: response.data
+                })
+            })
+            .catch(error => {console.log(error)});
+
+        Axios.get('https://pro-organizer-f83b5.firebaseio.com/boardData/-LuM4blPg67eyvzgAzwn/archivedBoards.json')
+            .then(response => {
+                let archivedCards = [];
+                if(response.data !== null) {
+                    archivedCards = response.data;
+                }
+                this.setState({
+                    archivedCards: archivedCards
+                })
+            })
+            .catch(error => {console.log(error);})
+    }
+
+    cardClickHandler = (card_details) => {
+        let boardData = this.state.boardData;
+        let cardData = boardData.cards.filter(card => {
+            return card.id === card_details.card_id;
+        });
+        let selectedCardData = {};
+        let columnData = boardData.columns.filter(column => {
+            return column.id === cardData[0].column;
         })
-        
-      }
-      function openAddCard(selectedColumn) {
-        
-        setCardModal(true);
-        setSelectedColumn(selectedColumn);
-        setEditCard(null);
-        setCardAdd(true);
-        
-      }
-     //Function to Add Card in Firestore
-    async function handleAddCard(card){
-      try
-      {
-        card['id'] = shortid();
-        const cards = [...selectedColumn.cards, card];
-        const columnCopy = deepCopy(selectedColumn);
-        columnCopy.cards=cards;
-        const addColumnStatus = await updateColumn(columnCopy.id, columnCopy);
-        if(addColumnStatus){
-          afterUpdateColumn(columns,selectedColumn,columnCopy,setColumns)
-          setCardModal(false);
-          
-        }
-      }
-      catch(error)
-      {
-        alert(error);
-      }
+        selectedCardData.card = cardData;
+        selectedCardData.column = columnData;
+        this.setState({
+            selectedCardData: selectedCardData,
+            showModal: true
+        })
+    }
+    
+    closeModalHandler = () => {
+        this.setState({
+            showModal: false,
+            selectedCardData: {}
+        })
+    }
 
-    }  
-     //Function to delete Board from Firestore
-     async function deleteBoardHandler() {
-        if (window.confirm('Are you sure you want to delete the board?'))
-         {
-          setLoading(true);
-          const status = await deleteBoard(boardDetails.id);
-          if(status){
-              props.history.push('/');
-          }
-        }
-      } 
-    //Function to delete column from Firestore
-    async function deleteColumnHandler(column){
-      const newColumnAfterDelete=columns
-      .filter(x=>x.id!==column.id)
-      .sort((a,b)=>a.created-b.created);
-      deleteColumn(column.id)
-      .then(()=>{
-        setColumns(newColumnAfterDelete);
-      })
-      .catch(error=>alert(error))
+    closeAddCardModalHandler = () => {
+        this.setState({
+            showAddCardModal: false,
+            addCardToColumnID: null
+        })
     }
-    //Function to perform Edit Card
-    function cardEdit(card,column){
-      setSelectedColumn(column);
-      setCardModal(true);
-      setEditCard(card);
-      setCardAdd(false);
-    }
-    //Function to card Edit
-    async function handleCardEdit(x){
-      try {
-        const card = { id: editCard.id, ...x };
-        const uColumn = deepCopy(selectedColumn);
-        const cards = selectedColumn.cards.filter((c) => c.id !== editCard.id);
-        const newCards = [...cards, card];
-        uColumn.cards = newCards;
-        const val = await updateColumn(selectedColumn.id, uColumn);
-        if (val) {
-          afterUpdateColumn(columns, selectedColumn, uColumn, setColumns);
-          setCardModal(false);
-          setSelectedColumn(null);
-          setEditCard(null);
-          setCardAdd(true);
-        }
-      } catch (error) {
-        alert(error);
-      }
 
+    closeAddColumnModalHandler = () => {
+        this.setState({
+            showAddColumnModal: false
+        })
     }
-    //Function to Card Handle Archive 
-    async function cardArchive(card, column) {
-      try {
-        card.isArchive = true;
-        const newCards = column.cards.filter((c) => c.id !== card.id);
-        const upColumn = deepCopy(column);
-        upColumn.cards = [...newCards, card];
-        const val = await updateColumn(column.id, upColumn);
-        if (val) {
-          afterUpdateColumn(columns, column, upColumn, setColumns);
-        }
-      } catch (error) {
-        alert(error);
-      }
+
+    addCardHandler = (column_id) => {
+        this.setState({
+            showAddCardModal: true,
+            addCardToColumnID: column_id
+        })
     }
-    //Function for Drag and Drop of Cards
-    async function dragFunc(ev,newColumn){
-      try {
-        const card = JSON.parse(ev.dataTransfer.getData('card'));
-        const oldColumn = JSON.parse(ev.dataTransfer.getData('columnFrom'));
-        if (oldColumn.id === newColumn.id) {
-          return;
+
+    addEditedCardToDBHandler = (values) => {
+        let id = this.state.selectedCardData.card[0].id;
+        let boardData = {...this.state.boardData};
+        let cardData = boardData.cards.filter(card => {return card.id === id});
+        for(let key in values) {
+            cardData[0][key] = values[key];
         }
-        oldColumn.cards = oldColumn.cards.filter((c) => c.id !== card.id);
-        const val = await updateColumn(oldColumn.id, oldColumn);
-        newColumn.cards = [...newColumn.cards, card];
-        const val1 = await updateColumn(newColumn.id, newColumn);
-        if (val && val1) {
-          const newCols = columns.filter(
-            (col) => col.id !== oldColumn.id && col.id !== newColumn.id
-          );
-          const sortedCols = [...newCols, oldColumn, newColumn].sort(
-            (a, b) => a.created - b.created
-          );
-          setColumns(sortedCols);
-        }
-      } catch (error) {
-        alert(error)
-      }
+        let url = 'https://pro-organizer-f83b5.firebaseio.com/boardData/-LuM4blPg67eyvzgAzwn/boards/'+boardData.id+'.json';
+        Axios.put(url, boardData)
+            .then(response => {
+                this.setState({
+                    boardData: boardData,
+                    showEditModal: false
+                })
+            })
+            .catch(error => {console.log(error)});
     }
-    return(
-        <>
-        {loading ? (
-        <Loader />
-            ) :
-        (<>
-        { (columnModal)&&<CreateColumnModal addColumn={handleAddCloumn} closeColumnModal={closeColumnModal} />}
-          { (cardModal)&&<CreateCard card={editCard} isAdd={isCardAdd} handleEdit={handleCardEdit} addCard={handleAddCard} teamMembers={props.location.state.teamMembers}  closeCardModal={closeCardModal}/>}
-            <div className={styles.container}>
-              <div className={styles.containerHeader}>
-                <h1 className={styles.headingtxt}>{props.location.state.boardName}</h1>
-                <button onClick={deleteBoardHandler}  className={styles.deleteBoard}>Delete Board</button>
-              </div>            
-             <div className={styles.ui}>
-                <div className={styles.columns}>
-                {columns.map(x=>(
-                <div onDrop={(e)=>dragFunc(e,x)} onDragOver={(e)=>e.preventDefault()} key={x.name} className={styles.column}>
-                <header>
-                {x.name}
-                <div className={styles.trash}>
-                <i onClick={()=>deleteColumnHandler(x)} id="trash" className="fa fa-trash fa-lg" aria-hidden="true"></i>
-                </div>
-                </header>
-                
-                 <ul>
-                  {x.cards.map(y=>(
-                  !y.isArchive && (  
-                  <IndividualCard
-                  
-                  card={y}
-                  board={props.location.state.boardName}
-                  key={y.id}
-                  column={x}
-                  handleEdit={()=>cardEdit(y,x)}
-                  handleArchive={() =>cardArchive(y, x)}
-                  />)
-                   )) }    
-                  </ul>   
-                 <footer><button onClick={()=>openAddCard(x)} className={styles.add}>Add a Card</button></footer>
-                </div>
-                
-            ))}
-            
-                 <button onClick={()=>setColumnModal(true)}  className={styles.addButton}>Add a column</button>
-                 </div>   
-            </div>
-        </div>
+
+    addCardToDBHandler = (values) => {
+        values['due_date'] = values['due_date'] !== null ? new Date(values['due_date']).getTime() : null;
+        values['board_id'] = this.state.boardData.id;
+        values['column'] = this.state.addCardToColumnID;
+        values['id'] = this.state.boardData.cards ? this.state.boardData.cards.slice(-1)[0].id + 1 : 0;
         
-        </>)
-}  
-        </>
-    )
+        let cards = this.state.boardData.cards || [];
+        cards.push(values);
+
+        let boardData = {...this.state.boardData};
+        boardData.cards = cards;
+
+        let url = 'https://pro-organizer-f83b5.firebaseio.com/boardData/-LuM4blPg67eyvzgAzwn/boards/'+this.state.boardData.id+'/cards.json';
+        Axios.put(url, cards)
+            .then(response => {
+                this.setState({
+                    showAddCardModal: false,
+                    addCardToColumnID: null,
+                    boardData: boardData
+                })
+            })
+            .catch(error => {console.log(error);}) 
+    }
+
+    addColumnHandler = () => {
+        this.setState({
+            showAddColumnModal: true
+        })
+    }
+
+    addColumnToDBHandler = () => {
+        let column_name = this.addColumnRef.current.value;
+        let column_id = toSnakeCase(column_name);
+        let newColumn = {
+            id: column_id,
+            name: column_name
+        }
+        let columns = this.state.boardData.columns || [];
+        columns.push(newColumn);
+        let boardData = {...this.state.boardData};
+        boardData.columns = columns;
+        
+        this.setState({
+            addColumnLoading: true
+        })
+
+        Axios.put('https://pro-organizer-f83b5.firebaseio.com/boardData/-LuM4blPg67eyvzgAzwn/boards/'+this.state.boardData.id+'/columns.json', columns)
+            .then(response => {
+                this.setState({
+                    showAddColumnModal: false,
+                    boardData: boardData,
+                    addColumnLoading: false
+                })
+            })
+            .catch(error => {console.log(error)});
+    }
+
+    editCardHandler = (column_id) => {
+        this.setState({
+            showEditModal: true,
+            showModal: false,
+            addCardToColumnID: column_id
+        })
+    }
+
+    archiveCardHandler = (archived_card) => {
+        let archivedCards = [...this.state.archivedCards];
+        archivedCards.push(archived_card);
+
+        let boardData = {...this.state.boardData};
+        let cards = boardData.cards;
+        let updatedCards = cards.filter(card => {return card.id !== archived_card.id;})
+        boardData.cards = updatedCards;
+        
+        Axios.put('https://pro-organizer-f83b5.firebaseio.com/boardData/-LuM4blPg67eyvzgAzwn/archivedCards.json', archivedCards)
+            .then(response => {
+                this.setState({
+                    archivedCards: archivedCards,
+                    showModal: false
+                })
+
+                Axios.put('https://pro-organizer-f83b5.firebaseio.com/boardData/-LuM4blPg67eyvzgAzwn/boards/'+this.state.boardData.id+'/cards.json', updatedCards)
+                    .then(response => {
+                        this.setState({
+                            boardData: boardData
+                        })
+                    })
+                    .catch(error => {console.log(error);})
+            })
+            .catch(error => {console.log(error);})
+    }
+
+    deleteColumnHandler = (column_id) => {
+        let boardData = {...this.state.boardData};
+        let cards = boardData.cards;
+        let columns = boardData.columns;
+        let updatedCards = cards.filter(card => {
+            return card.column !== column_id;
+        })
+        let updatedColumns = columns.filter(column => {
+            return column.id !== column_id;
+        })
+        boardData.cards = updatedCards;
+        boardData.columns = updatedColumns;
+        Axios.put('https://pro-organizer-f83b5.firebaseio.com/boardData/-LuM4blPg67eyvzgAzwn/boards/'+this.state.boardData.id+'.json', boardData)
+            .then(response => {
+                this.setState({
+                    boardData: boardData
+                })
+            })
+            .catch(error => {console.log(error);})
+    }
+
+    deleteBoardHandler = () => {
+        Axios.get('https://pro-organizer-f83b5.firebaseio.com/boardData/-LuM4blPg67eyvzgAzwn.json')
+            .then(response => {
+                let appData = {...response.data};
+                let allBoards = appData.allBoards;
+                let boards = appData.boards;
+                let updatedAllBoards = allBoards.filter(board => {
+                    return board.id !== this.state.boardData.id;
+                })
+                let updatedBoards = {};
+                for(let board of Object.keys(boards)) {
+                    if(board !== this.state.boardData.id) {
+                        updatedBoards[board] = boards[board];
+                    }
+                }
+                appData.allBoards = updatedAllBoards;
+                appData.boards = updatedBoards;
+                
+                Axios.put('https://pro-organizer-f83b5.firebaseio.com/boardData/-LuM4blPg67eyvzgAzwn.json', appData)
+                    .then(response => {
+                        this.props.history.push('/');
+                    })
+                    .catch(error => {console.log(error);})
+            })
+            .catch(error => {console.log(error);})
+    }
+
+    closeEditModalHandler = () => {
+        this.setState({
+            showEditModal: false,
+        })
+    }
+
+    droppedCardHandler = (received_card, receiving_column) => {
+        let boardData = {...this.state.boardData};
+        let cards = [...this.state.boardData.cards];
+        let updatedCards = cards.filter(card => {
+            if(card.id === received_card.id) {
+                card.column = receiving_column;
+                return card;
+            } else {
+                return card;
+            }
+        });
+        boardData.cards = updatedCards;
+        Axios.put('https://pro-organizer-f83b5.firebaseio.com/boardData/-LuM4blPg67eyvzgAzwn/boards/'+this.state.boardData.id+'/cards.json', updatedCards)
+            .then(response => {
+                this.setState({
+                    boardData: boardData
+                })
+            })
+            .catch(error => {console.log(error)});
+    }
+
+    render() {
+        let content = null;
+        if(Object.keys(this.state.boardData).length > 0) {
+            let dataOfBoard = {...this.state.boardData};
+            dataOfBoard.cards = dataOfBoard.cards || [];
+            let columns = null;
+            if(dataOfBoard.columns !== undefined) {
+                columns = dataOfBoard.columns.map(column => {
+                    let columnData = dataOfBoard.cards.filter(card => {
+                        return card.column === column.id;
+                    })
+                    return ( 
+                        <BoardColumn 
+                            title={column.name} 
+                            id={column.id} 
+                            columnData={columnData} 
+                            key={column.id} 
+                            cardClicked={this.cardClickHandler} 
+                            addCard={this.addCardHandler} 
+                            droppedCard={(card, column) => this.droppedCardHandler(card, column)} 
+                            deleteColumn={(column_id) =>  this.deleteColumnHandler(column_id)}
+                        />
+                    )
+                })
+            }  
+            let cardInfo = Object.keys(this.state.selectedCardData).length > 0 ? <CardInfo data={this.state.selectedCardData} editCard={this.editCardHandler} archiveCard={this.archiveCardHandler} /> : null;
+
+            content = (
+                <>
+                    {this.state.showModal ? <Modal content={cardInfo} close={this.closeModalHandler} /> : null}
+                    {
+                        this.state.showAddCardModal ?
+                        <Modal 
+                            content={
+                                <AddCard members={this.state.boardData.members} addCard={this.addCardToDBHandler} />
+                            } 
+                            close={this.closeAddCardModalHandler} 
+                        /> : 
+                        null
+                    }
+                    {
+                        this.state.showEditModal ?
+                        <Modal 
+                            content={
+                                <AddCard members={this.state.boardData.members} addCard={this.addEditedCardToDBHandler} editCard={true} cardData={this.state.selectedCardData} />
+                            } 
+                            close={this.closeEditModalHandler} 
+                        /> : 
+                        null
+                    }
+                    {
+                        this.state.showAddColumnModal ? 
+                        <Modal 
+                            content={
+                                this.state.addColumnLoading ?
+                                <span>Creating your column...</span> :
+                                <>
+                                    <p className={styles.BoardTitle}>Add column</p>
+                                    <div style={{display: 'flex', flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center'}}>
+                                        <p>Enter a column name:</p>
+                                        <input id='column_name' type='text' ref={this.addColumnRef} style={{width: '100%'}} />
+                                    </div>
+                                    <button id='CreateColumn' className={createBoardStyles.CreateButton} style={{width: 'auto', float: 'right'}} onClick={this.addColumnToDBHandler}>Add Column</button>
+                                </>
+                            }
+                            close={this.closeAddColumnModalHandler}
+                        /> :
+                        null}
+                    <div className={styles.BoardHeader}>
+                        <p className={styles.BoardTitle}>{this.state.boardData.name} Board</p>
+                        <button className={createBoardStyles.CreateButton} style={{backgroundColor: 'red', width: 'auto'}} onClick={this.deleteBoardHandler}>Delete Board</button>
+                    </div>
+                    <div className={styles.ColumnsContainer}>
+                        {columns}
+                        <div className={styles.AddColumn} onClick={this.addColumnHandler}>Add a column</div>
+                    </div>
+                </>
+            )
+        } else {
+            content = <p>Loading...</p>;
+        }
+        return (
+            <>
+                <div className={styles.Board}>
+                    {content}
+                </div>
+            </>
+        )
+    }
 }
 
-
-//Function to get All Columns
-async function getAllColumns(id, setColumns) {
-    const resultColumns = await getColumns(id);
-    setColumns(resultColumns);
-  }
-
-//Function to have Updated Column
-function afterUpdateColumn(columns, selectedColumn, upColumn, setColumns) {
-  const nullColumns = columns.filter((x) =>x.id !== selectedColumn.id);
-  const newColumnsAfterCardAdd = [...nullColumns, upColumn];
-  newColumnsAfterCardAdd.sort((a, b) => a.created - b.created);
-  console.log(newColumnsAfterCardAdd);
-  setColumns(newColumnsAfterCardAdd);
-}  
+export default withRouter(Board);

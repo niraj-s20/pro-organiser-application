@@ -1,25 +1,34 @@
-import React from "react";
-import { BrowserRouter as Router, Route, Switch } from "react-router-dom";
-import "./App.css";
-import NavBar from "./components/NavBar/NavBar";
-import Home from "./views/home/Home";
-import CreateBoard from "./views/addBoard/CreateBoard";
-import PageNotFound from "./views/pageNotFound/PageNotFound";
-import Board from "./views/board/Board";
+import React from 'react';
+import { Route, Switch, withRouter, Redirect } from 'react-router-dom';
+import { library } from '@fortawesome/fontawesome-svg-core';
+import { faList, faTrashAlt } from '@fortawesome/free-solid-svg-icons';
+
+import './App.css';
+
+import Boards from './../src/pages/Boards/Boards';
+import CreateBoard from './../src/pages/CreateBoard/CreateBoard';
+import Layout from './../src/pages/Layout/Layout';
+import Board from '../src/pages/Board/Board';
+
+library.add(faList, faTrashAlt);
 
 function App() {
-  return (
-    <Router>
-      <NavBar />
-      <Switch>
-        <Route exact path="/" component={Home}></Route>
-        <Route exact path="/createboard" component={CreateBoard}></Route>
-        <Route exact path="/:boardName" component={Board}></Route>
+  let routes = (
+    <Switch>
+      <Route path="/createboard" component={CreateBoard}></Route>
+      <Route path="/board/:boardId" component={Board}></Route>
+      <Route path="/" component={Boards}></Route>
+      <Redirect to="/" />
+    </Switch>
+  );
 
-        <Route path="*" component={PageNotFound}></Route>
-      </Switch>
-    </Router>
+  return (
+    <div className="App">
+      <Layout>
+        {routes}
+      </Layout>
+    </div>
   );
 }
 
-export default App;
+export default withRouter(App);
