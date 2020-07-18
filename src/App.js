@@ -1,14 +1,14 @@
-import React from 'react';
-import { Route, Switch, withRouter, Redirect } from 'react-router-dom';
-import { library } from '@fortawesome/fontawesome-svg-core';
-import { faList, faTrashAlt } from '@fortawesome/free-solid-svg-icons';
+import React from "react";
+import { Route, Switch, withRouter, Redirect } from "react-router-dom";
+import { library } from "@fortawesome/fontawesome-svg-core";
+import { faList, faTrashAlt } from "@fortawesome/free-solid-svg-icons";
 
-import './App.css';
+import "./App.css";
 
-import Boards from './../src/pages/Boards/Boards';
-import CreateBoard from './../src/pages/CreateBoard/CreateBoard';
-import Layout from './../src/pages/Layout/Layout';
-import Board from '../src/pages/Board/Board';
+import Boards from "./Pages/Boards/Boards";
+import CreateBoard from "./Pages/CreateBoard/CreateBoard";
+import Layout from "./Pages/Layout/Layout";
+import Board from "./Pages/Board/Board";
 
 library.add(faList, faTrashAlt);
 
@@ -24,9 +24,7 @@ function App() {
 
   return (
     <div className="App">
-      <Layout>
-        {routes}
-      </Layout>
+      <Layout>{routes}</Layout>
     </div>
   );
 }
